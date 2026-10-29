@@ -1,0 +1,481 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CoDraw - Collaborative Whiteboard</title>
+
+<style>
+:root {
+    --bg: #f3f2ee;
+    --panel: #ffffff;
+    --ink: #1d2b32;
+    --muted: #5d6b73;
+    --line: #cfd4d6;
+    --ok: #2f8f5b;
+    --bad: #c0483a;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font: 15px/1.4 system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 14px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+}
+
+h1 {
+    font-size: 18px;
+    margin: 0 8px 0 0;
+}
+
+.tools {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+input[type="color"] {
+    width: 36px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid var(--line);
+    background: none;
+}
+
+input[type="range"] {
+    width: 90px;
+}
+
+button {
+    font: inherit;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+}
+
+#eraser.active {
+    background: #e1e4e7;
+    border-color: #697780;
+    font-weight: 600;
+}
+
+#clear {
+    color: #b42318;
+}
+
+#status {
+    margin-left: auto;
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+#dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--bad);
+    margin-right: 5px;
+}
+
+#dot.on {
+    background: var(--ok);
+}
+
+main {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 14px;
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    max-width: 1000px;
+    aspect-ratio: 5 / 3;
+    background: #ffffff;
+    border: 1px solid var(--line);
+    touch-action: none;
+    cursor: crosshair;
+}
+
+canvas.eraser-mode {
+    cursor: cell;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+    <h1>CoDraw</h1>
+
+    <div class="tools">
+        <label>
+            <input
+                type="color"
+                id="color"
+                value="#1d2b32"
+                aria-label="Drawing colour">
+        </label>
+
+        <label>
+            Brush:
+            <input
+                type="range"
+                id="width"
+                min="1"
+                max="20"
+                value="3"
+                aria-label="Brush size">
+        </label>
+
+        <button id="eraser" aria-pressed="false">
+            Eraser: OFF
+        </button>
+
+        <button id="clear">Clear board</button>
+    </div>
+
+    <div id="status">
+        <span>
+            <span id="dot"></span>
+            <span id="conn">Connecting</span>
+        </span>
+        <span>Users: <b id="users">-</b></span>
+        <span>Committed: <b id="committed">0</b></span>
+        <span>Pending: <b id="pending">0</b></span>
+    </div>
+</header>
+
+<main>
+    <canvas id="board" width="1000" height="600"></canvas>
+</main>
+
+<script>
+const SERVER_URL =
+    "ws://" + (location.hostname || "localhost") + ":8765";
+
+const canvas = document.getElementById("board");
+const ctx = canvas.getContext("2d");
+
+const $ = (id) => document.getElementById(id);
+
+const clientId =
+    "c-" + Math.random().toString(36).slice(2, 10);
+
+const newId = () =>
+    clientId + "-" +
+    Date.now().toString(36) + "-" +
+    Math.random().toString(36).slice(2, 8);
+
+let committed = [];
+const pending = new Map();
+
+let current = null;
+let ws = null;
+let erasing = false;
+
+
+// ---------- Drawing and rendering ----------
+
+function drawStroke(stroke) {
+    if (!stroke.points || stroke.points.length === 0) {
+        return;
+    }
+
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = stroke.width;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        stroke.points[0][0],
+        stroke.points[0][1]
+    );
+
+    if (stroke.points.length === 1) {
+        ctx.lineTo(
+            stroke.points[0][0] + 0.01,
+            stroke.points[0][1]
+        );
+    }
+
+    for (const point of stroke.points.slice(1)) {
+        ctx.lineTo(point[0], point[1]);
+    }
+
+    ctx.stroke();
+}
+
+function render() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Find the latest committed clear operation.
+    let start = 0;
+
+    for (let i = committed.length - 1; i >= 0; i--) {
+        if (committed[i].kind === "CLEAR") {
+            start = i + 1;
+            break;
+        }
+    }
+
+    // Replay committed operations after the last clear.
+    for (const entry of committed.slice(start)) {
+        if (entry.kind === "STROKE") {
+            drawStroke(entry.data);
+        }
+    }
+
+    // Show operations that have not yet been confirmed.
+    for (const op of pending.values()) {
+        if (op.kind === "STROKE") {
+            drawStroke(op.data);
+        }
+    }
+
+    // Show the stroke currently being drawn.
+    if (current) {
+        drawStroke(current);
+    }
+
+    $("committed").textContent =
+        committed.length
+            ? committed[committed.length - 1].seq
+            : 0;
+
+    $("pending").textContent = pending.size;
+}
+
+
+// ---------- Eraser ----------
+
+$("eraser").addEventListener("click", () => {
+    erasing = !erasing;
+
+    $("eraser").textContent =
+        erasing ? "Eraser: ON" : "Eraser: OFF";
+
+    $("eraser").classList.toggle("active", erasing);
+
+    $("eraser").setAttribute(
+        "aria-pressed",
+        String(erasing)
+    );
+
+    canvas.classList.toggle("eraser-mode", erasing);
+});
+
+
+// ---------- WebSocket networking ----------
+
+function connect() {
+    ws = new WebSocket(SERVER_URL);
+
+    ws.onopen = () => {
+        $("dot").classList.add("on");
+        $("conn").textContent = "Connected";
+    };
+
+    ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+
+        if (msg.type === "INIT") {
+            committed = msg.entries;
+
+            // Remove operations already confirmed by the server.
+            for (const entry of committed) {
+                pending.delete(entry.op_id);
+            }
+
+            // Retry unconfirmed operations using their original IDs.
+            for (const op of pending.values()) {
+                send(op);
+            }
+
+            render();
+        }
+
+        else if (msg.type === "COMMIT") {
+            const entry = msg.entry;
+
+            pending.delete(entry.op_id);
+
+            const last = committed.length
+                ? committed[committed.length - 1].seq
+                : 0;
+
+            if (entry.seq === last + 1) {
+                committed.push(entry);
+            }
+            else if (entry.seq > last + 1) {
+                // Missing sequence: reconnect to request a snapshot.
+                ws.close();
+                return;
+            }
+
+            render();
+        }
+
+        else if (msg.type === "STATUS") {
+            $("users").textContent = msg.clients;
+            $("committed").textContent = msg.committed;
+        }
+
+        else if (msg.type === "ERROR") {
+            console.error("Server error:", msg.message);
+        }
+    };
+
+    ws.onclose = () => {
+        $("dot").classList.remove("on");
+        $("conn").textContent = "Disconnected, retrying";
+
+        setTimeout(connect, 1000);
+    };
+
+    ws.onerror = () => {
+        $("conn").textContent = "Connection error";
+    };
+}
+
+function send(op) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            type: "OP",
+            op: op
+        }));
+    }
+}
+
+function submit(kind, data) {
+    const op = {
+        op_id: newId(),
+        kind: kind,
+        data: data,
+        client_id: clientId
+    };
+
+    pending.set(op.op_id, op);
+    send(op);
+    render();
+}
+
+
+// ---------- Pointer input ----------
+
+function pos(event) {
+    const rect = canvas.getBoundingClientRect();
+
+    return [
+        Math.round(
+            (event.clientX - rect.left) *
+            canvas.width / rect.width
+        ),
+        Math.round(
+            (event.clientY - rect.top) *
+            canvas.height / rect.height
+        )
+    ];
+}
+
+canvas.addEventListener("pointerdown", (event) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        return;
+    }
+
+    canvas.setPointerCapture(event.pointerId);
+
+    current = {
+        // The eraser uses white strokes on the white canvas.
+        color: erasing ? "#ffffff" : $("color").value,
+
+        // Make the eraser wider than the normal brush.
+        width: erasing
+            ? Math.max(15, Number($("width").value) * 3)
+            : Number($("width").value),
+
+        points: [pos(event)]
+    };
+
+    render();
+});
+
+canvas.addEventListener("pointermove", (event) => {
+    if (!current) {
+        return;
+    }
+
+    current.points.push(pos(event));
+    render();
+});
+
+function finishDrawing() {
+    if (!current) {
+        return;
+    }
+
+    const stroke = current;
+    current = null;
+
+    submit("STROKE", stroke);
+}
+
+canvas.addEventListener("pointerup", finishDrawing);
+canvas.addEventListener("pointercancel", finishDrawing);
+
+
+// ---------- Clear board ----------
+
+$("clear").addEventListener("click", () => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        return;
+    }
+
+    submit("CLEAR", null);
+});
+
+
+// ---------- Start ----------
+
+connect();
+render();
+</script>
+
+</body>
+</html>
