@@ -33,7 +33,7 @@ planned next (see [Roadmap](#roadmap)).
 ## Setup
 
 ```bash
-git clone <your-repo-url>
+git clone this repo
 cd <repo-folder>
 
 # optional but recommended: a virtual environment
@@ -119,14 +119,7 @@ To start with an empty board, stop the server and delete `board.jsonl`.
 | `Address already in use` | Another server is running on port 8765. Stop it, or start with `python server.py --port 8766` and change `SERVER_PORT` in `index.html`. |
 | Cannot draw | The client only accepts drawing while connected. Wait for *Connected*. |
 
-## Roadmap
 
-- [x] Single server, shared canvas, persistent operation log
-- [ ] Several servers with replicated logs
-- [ ] Dynamic server discovery (UDP multicast)
-- [ ] Leader election (Bully algorithm) and heartbeats
-- [ ] Reliable total-order delivery with recovery after leader failure
-- [ ] Client failover and rejoin synchronisation
 
 ## Team
 
