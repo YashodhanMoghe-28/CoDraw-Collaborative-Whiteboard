@@ -1,0 +1,7 @@
+@"
+__pycache__/
+*.py[cod]
+board.jsonl
+.venv/
+venv/
+"@ | Set-Content .gitignore
