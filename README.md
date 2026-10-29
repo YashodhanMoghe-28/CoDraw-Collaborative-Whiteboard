@@ -6,9 +6,7 @@ Several people draw on one shared canvas from different computers. Strokes,
 the eraser and "Clear board" show up on every connected screen, and the board
 is saved to disk so it survives a server restart.
 
-**Current version:** one server, any number of browsers. Replication across
-several servers, leader election (Bully algorithm) and fault tolerance are
-planned next (see [Roadmap](#roadmap)).
+
 
 ## Files
 
