@@ -1,0 +1,28 @@
+ILLUSTRATIVE FORMAT ONLY — real timestamps, IDs and order depend on execution.
+
+12:00:00 | NODE 1 | DISCOVERY          | Found node 3 at http://192.168.1.13:8765
+12:00:01 | NODE 1 | SEND ELECTION      | Node 1 -> Node 3, seq=-
+12:00:01 | NODE 3 | ANSWER             | Responded to node 1; higher ID participates
+12:00:01 | NODE 3 | ELECTION           | Bully winner 3; recovering session ...
+12:00:01 | NODE 3 | RECOVERY COMPARE   | Collected (stored, committed): [(4, 4), (4, 4), (4, 4)]
+12:00:01 | NODE 3 | READY              | Leader 3; 4 operations recovered
+
+DRAWING
+12:00:02 | NODE 1 | FORWARD            | Client ... -> leader 3; operation=STROKE
+12:00:02 | NODE 3 | LOCAL PERSIST      | Stored #5 STROKE; sending PREPARE to [1, 2]
+12:00:02 | NODE 3 | SEND PREPARE       | Node 3 -> Node 2, seq=5
+12:00:02 | NODE 2 | PREPARE ACK        | #5 durably stored; acknowledgement returned to leader 3.
+12:00:02 | NODE 2 | APPLY              | Confirmed through #5; browser state updated in sequence order.
+12:00:02 | NODE 3 | COMMIT             | #5 STROKE replicated on 3 nodes
+
+LEADER LOSS
+12:00:10 | NODE 2 | HEARTBEAT MISSED   | ... retrying; not yet declaring failure.
+12:00:13 | NODE 2 | LEADER SUSPECTED   | Node 3 exceeded heartbeat timeout. Countermeasure: pause, elect, synchronise.
+12:00:15 | NODE 2 | ELECTION           | Bully winner 2; recovering session ...
+12:00:15 | NODE 1 | LOG SYNCHRONISED   | 5 -> 5 stored entries; confirmed prefix preserved.
+12:00:15 | NODE 2 | READY              | Leader 2; 5 operations recovered
+
+REJOIN
+12:00:25 | NODE 2 | PEER RETURNED      | Node 3 is reachable again; its log must catch up.
+12:00:27 | NODE 3 | RECOVERY PLAN      | Preserve confirmed prefixes; install 8 entries on view [1, 2, 3].
+12:00:27 | NODE 3 | READY              | Leader 3; 8 operations recovered

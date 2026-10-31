@@ -1,0 +1,11 @@
+# CoDraw: Python 3.11 or newer (including Python 3.13).
+# Install with: python -m pip install -r requirements.txt
+# HTTP server, WebSocket connections and server-to-server HTTP communication.
+# pip automatically installs aiohttp's required transitive dependencies.
+aiohttp>=3.14.4,<4
+
+# All other Python imports use the standard library or files in this project.
+# JSON storage, discovery, elections, terminal controls and unittest need no
+# additional pip packages. The browser interface uses native HTML/JS/Canvas.
+# Node.js is optional and only needed for tests/test_client.cjs; install it
+# separately if you want to run that JavaScript test (it is not a pip package).

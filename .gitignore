@@ -1,7 +1,9 @@
-@"
-__pycache__/
-*.py[cod]
-board.jsonl
 .venv/
 venv/
-"@ | Set-Content .gitignore
+__pycache__/
+*.pyc
+data/
+*.log
+*.torn
+
+device.local.json

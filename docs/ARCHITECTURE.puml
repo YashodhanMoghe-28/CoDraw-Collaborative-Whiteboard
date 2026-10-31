@@ -1,0 +1,29 @@
+@startuml
+title CoDraw — Distributed Collaborative Whiteboard
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam roundcorner 14
+skinparam defaultFontName Arial
+skinparam ArrowColor #52677D
+rectangle "Browser clients\nCanvas + cluster dashboard" as UI #DBEAFE
+rectangle "Python leader\nBully winner\nOrder + replicate + recover" as A #DCFCE7
+rectangle "Python follower B\nForward + acknowledge + apply" as B #EFF6FF
+rectangle "Python follower C\nForward + acknowledge + apply" as C #EFF6FF
+artifact "Local JSONL A\nENTRY + COMMIT records" as SA #FFF7ED
+artifact "Local JSONL B\nENTRY + COMMIT records" as SB #FFF7ED
+artifact "Local JSONL C\nENTRY + COMMIT records" as SC #FFF7ED
+UI <--> A : WebSocket
+UI <--> B : WebSocket
+UI <--> C : WebSocket
+A <--> B : Peer HTTP RPC
+A <--> C : Peer HTTP RPC
+A --> SA : Persist / replay
+B --> SB : Persist / replay
+C --> SC : Persist / replay
+note bottom
+All nodes: UDP discovery, HTTP heartbeats, Bully election.
+Stable view: PREPARE on all -> APPLY -> client confirmation.
+Failure: pause -> elect -> reconcile history -> resume.
+Trusted connected-LAN prototype; partitions unsupported.
+end note
+@enduml
