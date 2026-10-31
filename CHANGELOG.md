@@ -25,5 +25,10 @@ backend with discovery, election, replication and recovery.
 - Add client failover, pending-operation persistence, PNG export and status dashboard.
 - Add independent Windows node launchers, local demo runner, fault injector and tests.
 
+
+
+
+
+
 The protocol is scoped explicitly to the course's local-network crash demonstration.
 It does not implement Raft, Byzantine agreement or arbitrary partition tolerance.
